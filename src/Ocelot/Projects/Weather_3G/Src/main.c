@@ -56,6 +56,7 @@
 #include "ssCli.h"
 #include "CliCommonCmds.h"
 #include <string.h>
+#include "ssSi70xx.h"
 
 //todo: move to compiler switch
 //#define UBLOX_SARA_R410
@@ -98,8 +99,13 @@ osThreadId modemToUartTaskHandle;
 osThreadId ledTaskHandle;
 osThreadId watchdogTaskHandle;
 
+static I2C_HandleTypeDef hi2c2;
+
 static int32_t hostuart = -1;
 static int32_t mtuart = -1;
+
+static int32_t si7021_handle;
+char str_buff[50];
 
 const char cliAppName[] = "ModemPassthrough";
 
@@ -125,11 +131,31 @@ int main(void)
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   BSP_init();
   
-  int slon = HSE_VALUE;
-
   /* Init library modules */
   ssUartInit(BSP_UART_COUNT);
   
+  __HAL_RCC_I2C1_CLK_ENABLE();
+
+  hi2c2.Instance = I2C1;
+  //hi2c2.Init.Timing = 0x20303E5D;
+  hi2c2.Init.ClockSpeed = 100000;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  //hi2c2.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+
+  HAL_I2C_Init(&hi2c2);
+    /* Configure Analogue filter */
+  HAL_I2CEx_ConfigAnalogFilter(&hi2c2, I2C_ANALOGFILTER_ENABLE);
+
+  ssSi70xx_Init();
+  si7021_handle = ssSi70xx_Open(&hi2c2);
+  //configASSERT(si7021_handle != -1);
+
+
 
   ssCliUartConsoleInit();
   ssCliUartConsoleStart();
@@ -141,14 +167,17 @@ int main(void)
     
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
-  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
   
   osThreadDef(watchdogTask, WatchdogTask, osPriorityHigh, 0, 240);
   watchdogTaskHandle = osThreadCreate(osThread(watchdogTask), NULL);
 
   osThreadDef(ledTask, LedTask, osPriorityNormal, 0, 128);
   ledTaskHandle = osThreadCreate(osThread(ledTask), NULL);
+
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+
+
 
 
 
@@ -208,7 +237,7 @@ void StartDefaultTask(void const * argument)
   config.StopBits = UART_STOPBITS_1;
   config.WordLength = UART_WORDLENGTH_8B;
   mtuart = ssUartOpen(USART3, &config, 1024);
-  configASSERT(mtuart >= 0);
+  //configASSERT(mtuart >= 0);
   
 
 #ifdef UBLOX_SARA_N211
@@ -251,7 +280,6 @@ void StartDefaultTask(void const * argument)
   osDelay(100);
 #endif
 
-
   osThreadDef(uartToModemTask, UartToModemTask, osPriorityNormal, 0, 240);
   uartToModemTaskHandle = osThreadCreate(osThread(uartToModemTask), NULL);
   
@@ -262,6 +290,17 @@ void StartDefaultTask(void const * argument)
   for(;;)
   {
     osDelay(1000);
+
+    int16_t temperature;
+
+#read temperature every 5 seconds
+    if(ssSi70xx_ReadTemperature(si7021_handle, 100, &temperature) == SS_SI70XX_OK) {
+
+  	  //sprintf(str_buff, "Read: %d.%d C\n\r", temperature/100, temperature % 100);
+  	  //ssUartPuts(hostuart, str_buff);
+    	//printf("Read: %d.%d C\n\r", temperature/100, temperature % 100);
+    }
+
   }
   /* USER CODE END 5 */ 
 }
