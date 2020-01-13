@@ -20,6 +20,7 @@
 #include "netinet/in.h"
 #include "arpa/inet.h"
 #include "sys/errno.h"
+#include "sys/select.h"
 
 #include "FreeRTOS.h"
 #include "cmsis_os.h"
@@ -27,6 +28,7 @@
 #include "ssDevMan.h"
 #include "ssSocket.h" 
 #include "ssLogging.h"
+#include "fifo.h"
 
 /*------------------------- MACRO DEFINITIONS --------------------------------*/
 #define MODEM_SOCKET      1
@@ -34,17 +36,46 @@
 
 /*------------------------- TYPE DEFINITIONS ---------------------------------*/
 
+/************************************************************************
+*    Structure per socket.
+*************************************************************************/
+struct socket_t {
+  /* Socket state */
+  socket_state_t state;
+  /* Data that was left from the previous read */
+  FifoHandle_t rxfifo;
+  /* Offset in the data that was left from the previous read */
+  uint16_t lastoffset;
+#ifdef  SOCKETS_DEBUG
+  /* Number of times data was received */
+  int16_t rcevent;
+  /* Number of times data was sent */
+  uint16_t sendevent;
+  /* Socket flags */
+  uint16_t flags;
+  /* Last error that occured on this socket */
+  int8_t err;
+#endif /* SOCKETS_DEBUG */
+  /* Status of socket */
+  uint8_t taken;
+  uint8_t protocol;
+  socket_type_t type;
+  struct netif_t *interface;
+};
+
 /*------------------------- PUBLIC VARIABLES ---------------------------------*/
 /* The global array of available sockets */
 struct socket_t sockets[NUM_SOCKETS];
 
+extern int errno;
+
 /*------------------------- PRIVATE VARIABLES --------------------------------*/
+
 
 /*------------------------- PRIVATE FUNCTION PROTOTYPES ----------------------*/
 
 /*------------------------- PRIVATE FUNCTION DEFINITIONS ---------------------*/
 static struct addrinfo *allocaddrinfo(void);
-
 /*------------------------- PUBLIC FUNCTION DEFINITIONS ----------------------*/
 
 static struct socket_t *get_socket(int16_t s)
@@ -56,12 +87,6 @@ static struct socket_t *get_socket(int16_t s)
   }
 
   sock = &sockets[s];
-
-  if (!sock->taken) {
-
-    return sock;
-    //return NULL;      // MERKAT dbg
-  }
 
   return sock;
 }
@@ -78,14 +103,15 @@ int16_t socket(int domain, int type, int protocol)
   if(i > -1 && !sockets[i].taken) 
   {
     ssLoggingPrint(ESsLoggingLevel_Debug, 0, "socket created id=%d (domain=%d, type=%d, protocol=%d)", i, domain, type, protocol);
-    
     sockets[i].state      = SS_UNCONNECTED;
-    sockets[i].lastdata   = NULL;
+    sockets[i].rxfifo     = fifo_create(NULL, SOCKBUF_SIZE);;
     sockets[i].lastoffset = 0;
+#ifdef  SOCKETS_DEBUG
     sockets[i].rcevent    = 0;
-    sockets[i].sendevent  = 1;  /* TCP send buf is empty */
+    sockets[i].sendevent  = 0;
     sockets[i].flags      = 0;
     sockets[i].err        = 0;
+#endif /* SOCKETS_DEBUG */
     sockets[i].taken      = 1;
     sockets[i].protocol   = protocol;
     sockets[i].type       = type;
@@ -93,7 +119,7 @@ int16_t socket(int domain, int type, int protocol)
     return i;
   }
   
-  return -1;
+  return i;
 }
 
 int32_t connect(int s, const struct sockaddr *name, socklen_t namelen)
@@ -106,23 +132,17 @@ int32_t connect(int s, const struct sockaddr *name, socklen_t namelen)
   {
     return result;
   }
-  /* Will user later, junk for now */
-  /*
-  if (sock->state == SS_LISTENING)
-  {
-    return result;
-  }
+
+  /* TODO - not  in POSIX style  but makes working with ublox modems easier */
   if (sock->state == SS_CONNECTED)
   {
+    ssLoggingPrint(ESsLoggingLevel_Error, 0, "socket %d is already connected", s);
     return result;
   }
-  */
 
   result = sock->interface->socket_connect(sock->interface, s, name, namelen);
-  
-  ssLoggingPrint(ESsLoggingLevel_Debug, 0, "socket connect id=%d, name=%s, status=%s", s, name->sa_data, result);  
 
-  if (result)
+  if (result == 0)
   {
     sock->state = SS_CONNECTED;
   }
@@ -132,15 +152,21 @@ int32_t connect(int s, const struct sockaddr *name, socklen_t namelen)
 int32_t sendto(int s, const void *data, size_t size, int8_t flags, const struct sockaddr *to, socklen_t tolen)
 {
   struct socket_t *sock;
-  int32_t     result;
+  int32_t     result = -1;
 
   sock = get_socket(s);
   if (!sock)
     return -1;
 
   result = sock->interface->socket_sendto(sock->interface, s, (char *)data, size, 0, (const struct sockaddr_in *)to, tolen);
-  ssLoggingPrintRawStr(ESsLoggingLevel_Debug, 0, data, size, "socket sendto s=%d to=0x%x:%d =>", s, ((const struct sockaddr_in *)to)->sin_addr.s_addr, ((const struct sockaddr_in *)to)->sin_port);
-  
+  //ssLoggingPrintRawStr(ESsLoggingLevel_Debug, 0, data, size, "socket sendto s=%d to=0x%x:%d =>", s, ((const struct sockaddr_in *)to)->sin_addr.s_addr, ((const struct sockaddr_in *)to)->sin_port);
+
+#ifdef SOCKETS_DEBUG
+  if (result)
+  {
+    //sock->sendevent += 1;
+  }
+#endif
   return result;
 }
 
@@ -157,6 +183,12 @@ int32_t send(int s, const void *data, size_t size, int8_t flags)
   {
       result = sock->interface->socket_send(sock->interface, s, data, size, 0);
   }
+#ifdef SOCKETS_DEBUG
+  if (result)
+  {
+    sock->sendevent += 1;
+  }
+#endif
 
   return result;
 }
@@ -164,25 +196,46 @@ int32_t send(int s, const void *data, size_t size, int8_t flags)
 int32_t recvfrom(int s, void *mem, size_t len, int8_t flags, struct sockaddr *from, socklen_t *from_len)
 {
   struct socket_t   *sock;
-  int32_t           length = -1;
-  
+  int32_t           recv_length = -1;
+  char buf[SOCKBUF_SIZE] = {0};
+  uint16_t copylen = 0;
+
   sock = get_socket(s);
   if(!sock)
   {
     return -1;
   }
-      
-  /* No data was left from previous operation, try to get some from the network */
-  //length = sock->interface->socket_recvfrom(sock->interface, s, (buf->p->payload), len, 0, (struct sockaddr_in *)from, (uint16_t *)from_len);
-  uint16_t temp_len = sizeof(struct sockaddr_in);
-  length = sock->interface->socket_recvfrom(sock->interface, s, mem, len, 0, (struct sockaddr_in *)from, &temp_len);
- 
-  if(length>0)
+
+  copylen = fifo_length(sock->rxfifo);
+
+  if (copylen)
   {
-    ssLoggingPrintRawStr(ESsLoggingLevel_Debug, 0, mem, length, "socket recvfrom s=%d from=0x%x:d =>", s, ((const struct sockaddr_in *)from)->sin_addr.s_addr, ((const struct sockaddr_in *)from)->sin_port);
+    /* There is data left from the last recv operation */
+    fifo_read(sock->rxfifo, mem, copylen, 0);
+    recv_length = copylen;
+  }
+  else
+  {
+     recv_length = sock->interface->socket_recvfrom(sock->interface, s, buf, len, 0, (struct sockaddr_in *)from, from_len);
+   
+    if(recv_length > 0)
+    {
+      ssLoggingPrintRawStr(ESsLoggingLevel_Debug, 0, mem, recv_length, "socket recvfrom s=%d from=0x%x:d =>", s, ((const struct sockaddr_in *)from)->sin_addr.s_addr, ((const struct sockaddr_in *)from)->sin_port);
+      memcpy(mem, buf, recv_length);
+      if (recv_length > len)
+      {
+        /* If all data doesn't fit into provided buffer, we'll copy what we can and the rest we'll save for later */
+        fifo_write(sock->rxfifo, buf+len, recv_length-len, 0);
+      }
+
+#ifdef SOCKETS_DEBUG
+    sock->rcevent += 1;
+#endif
+
+    }  
   }
   
-  return length;
+  return recv_length;
 }
 
 int32_t recv(int s, void *mem, size_t len, int8_t flags)
@@ -198,6 +251,13 @@ int32_t recv(int s, void *mem, size_t len, int8_t flags)
 
   length = sock->interface->socket_recv(sock->interface, s, mem, len, 0);
 
+#ifdef SOCKETS_DEBUG
+  if (length > 0)
+  {
+    sock->rcevent += 1;
+  }
+#endif
+
   return length;
 }
 
@@ -210,15 +270,20 @@ int8_t close (int16_t s)
   {
     return -1;
   }
+  else if (sock->state == SS_CONNECTED)
+  {
+    /* Higher libs will sometimes close the socket after it is connected */
+    /* Ublox modems can't tell the difference so we won't close the socket in that case */
+    return 0;
+  }
   else
   {
     sock->interface->socket_close(sock->interface, s);
-
-    sock->lastdata   = NULL;
+    fifo_destroy(sock->rxfifo);
+    sock->rxfifo     = NULL;
     sock->lastoffset = 0;
     sock->taken      = 0;
     sock->state      = SS_UNCONNECTED;
-    vPortFree(sock);
     return 0;
   }
 }
@@ -272,12 +337,13 @@ struct hostent *gethostbyname(const char *hostname)
 }
 
 /* Merkat -- still working on it */
-int s_getaddrinfo(const char *node, const char *service,
+int getaddrinfo(const char *node, const char *service,
        const struct addrinfo *hints, struct addrinfo **res)
 {
+  netif_t *net_dev = NULL;
   struct in_addr addr;
   struct addrinfo *ai = NULL;
-  netif_t *net_dev = NULL;
+  struct sockaddr_in sin = {0};
   bool is_numeric = false;
   bool is_found = false;
 
@@ -292,6 +358,9 @@ int s_getaddrinfo(const char *node, const char *service,
   {
     return -1;
   }
+ 
+  memset(&sin, 0, sizeof(sin));
+  sin.sin_family = AF_INET;
 
   /* Check for all-numeric hostname with no trailing dot.
    * No need to query network device in that case, just copy to output structure.
@@ -309,6 +378,7 @@ int s_getaddrinfo(const char *node, const char *service,
       /* Looks like an IP address; convert it. */
       if (inet_aton(node, &addr) != 0) 
       {
+        sin.sin_addr = addr;
         is_numeric = true;
         is_found = true;
       }
@@ -321,6 +391,7 @@ int s_getaddrinfo(const char *node, const char *service,
     net_dev = get_device();
     if(net_dev->gethostbyname(node, &addr.s_addr) == 0)
     {
+      sin.sin_addr = addr;
       is_found = true;
     }
   }
@@ -337,8 +408,13 @@ int s_getaddrinfo(const char *node, const char *service,
         ai->ai_socktype = hints->ai_socktype;
         ai->ai_protocol = hints->ai_socktype; /* Merkat also waakama TODO */
       }
+
+      if (service)
+      {
+        sin.sin_port = htons(atoi(service));
+      }
       ai->ai_addr->sa_family = AF_INET;
-      ai->ai_addr->sa_len = sizeof(struct sockaddr);
+      ai->ai_addrlen = sizeof(struct sockaddr);   // Merkat temp -DBG
       if(is_numeric)
       {
         strcpy(ai->ai_addr->sa_data, node);
@@ -350,7 +426,12 @@ int s_getaddrinfo(const char *node, const char *service,
           freeaddrinfo(ai);
           ai = NULL;
         }
+        else
+        {
+          memcpy(ai->ai_addr->sa_data, ((struct sockaddr *) &sin)->sa_data, sizeof((ai->ai_addr->sa_data)));
+        }
       }
+      memcpy(ai->ai_addr, &sin, sizeof(sin));
     }
   }
 
@@ -365,8 +446,10 @@ void freeaddrinfo(struct addrinfo *res)
   vPortFree(res);
 }
 
+
 /* Convert string to integer */
-int32_t ss_atoi(const char *str)
+/*
+static int32_t atoi(const char *str)
 {
   int res = 0;
   int i = 0;
@@ -377,7 +460,25 @@ int32_t ss_atoi(const char *str)
   }
   return res;
 }
+*/
 
+/* dots and numbers string to unsigned long */
+uint32_t inet_addr(const char *cp)
+{
+  struct in_addr val;
+  if (inet_aton(cp, &val))
+  {
+    return val.s_addr;
+  }
+  return NULL;
+
+}
+
+/* Not supported for now -- TODO */
+int select (int __nfds, fd_set *restrict __readfds, fd_set *restrict __writefds, fd_set *restrict __exceptfds, struct timeval *restrict __timeout)
+{
+  return 1;
+}
 
 /*------------------------- PRIVATE FUNCTION DEFINITIONS ---------------------*/
 static struct addrinfo *allocaddrinfo()

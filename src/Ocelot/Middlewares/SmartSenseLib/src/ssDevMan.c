@@ -40,11 +40,14 @@
 
 /*------------------------- PRIVATE FUNCTION PROTOTYPES ----------------------*/
 
+#define APN       "internet.ht.hr"
+#define PIN         NULL
+
 netif_t *get_device(void)
 {
 
 #ifndef WIFI
-  return (netif_t *)s_init_modem();
+  return (netif_t *)s_init_modem(APN, PIN);
 #else
   return (netif_t *)s_init_wifi_dev();
 #endif

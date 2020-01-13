@@ -249,13 +249,9 @@ bool modem_nwk_register(modem_t *self)
           // If not, set it
           if (status != 0)
           {
-            /* Don't check return code here as there's not much
-               we can do if this fails. */
-        	// @TODO> add error handling
-            if(atparser_send(self->at, "AT+COPS=0"))
-            {
-              atparser_recv(self->at, "OK");
-            }
+            // Don't check return code here as there's not much
+            // we can do if this fails.
+            atparser_send(self->at, "AT+COPS=0") && atparser_recv(self->at, "OK");
           }
         }
         
@@ -416,7 +412,7 @@ int modem_socket_open(modem_t *self, int protocol)
   
   /* we support only udp and tcp protocols */
   if(protocol != IPPROTO_TCP &&
-     protocol != IPPROTO_UDP && protocol != 0)        /* Merkat 0 is for waakama compatibility */
+     protocol != IPPROTO_UDP && protocol != 2)        /* Merkat 2 is for waakama compatibility */
   {
     return -1;
   }
@@ -424,7 +420,7 @@ int modem_socket_open(modem_t *self, int protocol)
   LOCK();
   
   /* Merkat temp fix for waakama compatibility */
-  if (protocol == 0)
+  if (protocol == 0 || protocol == 2)
     protocol = IPPROTO_UDP;
   
   if (atparser_send(self->at, "AT+USOCR=%d", protocol))
@@ -494,7 +490,7 @@ bool modem_set_hex_mode(modem_t *self, uint8_t option)
 }  
 
 // Send to an IP address.
-int16_t modem_socket_sendto(modem_t *self,
+int32_t modem_socket_sendto(modem_t *self,
                             int socket,
                             const void *message,
                             size_t length,
@@ -525,16 +521,8 @@ int16_t modem_socket_sendto(modem_t *self,
     if (atparser_send(self->at, "AT+USOST=%d,\"%s\",%d,%d", socket,
                       dest_addr->sin_addr, dest_addr->sin_port, blk) &&
         atparser_recv(self->at, "@")) {
-          osDelay(50); // Merkat changed from 200 to 100
-          int temp;
-          temp = atparser_write(self->at, buf, blk+1);
-          //for (size_t i = 0; i <= length; i++) Merkat trying above
-          //{
-          //atparser_putc(self->at, buf[i]);
-          //osDelay(100);
-          /* code */
-          //}
-          // ssLoggingPrint(ESsLoggingLevel_Debug, 0, "atparser_write(%d) returned %d", blk, temp);
+          osDelay(50); /* -- experimenting with delay time Merkat */
+          atparser_write(self->at, buf, blk+1);
           if (atparser_recv(self->at, "OK"))
           {
             nbytes += blk;
@@ -558,7 +546,7 @@ int16_t modem_socket_sendto(modem_t *self,
   return (nbytes > 0) ? nbytes : (-1);
 }
 
-int16_t modem_socket_send(modem_t *self, int socket, const void *message, size_t length)
+int32_t modem_socket_send(modem_t *self, int socket, const void *message, size_t length)
 {
   bool success = true;
   const char *buf = (const char *) message;
@@ -589,13 +577,9 @@ int16_t modem_socket_send(modem_t *self, int socket, const void *message, size_t
         atparser_recv(self->at, "@")) 
     {
       osDelay(100);
-      //int temp;
-      //temp = atparser_write(self->at, buf, blk);
       for (size_t i = 0; i <= length; i++) 
       {
         atparser_putc(self->at, buf[i]);
-        //osDelay(100);
-        /* code */
         // ssLoggingPrint(ESsLoggingLevel_Debug, 0, "atparser_write(%d) returned %d", blk, temp);
         if (atparser_recv(self->at, "OK"))
         {
@@ -623,7 +607,7 @@ int16_t modem_socket_send(modem_t *self, int socket, const void *message, size_t
   return (nbytes > 0) ? nbytes : (-1);
 }
 
-int16_t modem_socket_recv(modem_t *self, int socket, void *buffer, size_t length)
+int32_t modem_socket_recv(modem_t *self, int socket, void *buffer, size_t length)
 {
   
   bool success = true;
@@ -731,7 +715,7 @@ int16_t modem_socket_recv(modem_t *self, int socket, void *buffer, size_t length
 }
 
 
-int16_t modem_socket_recvfrom(modem_t *self,
+int32_t modem_socket_recvfrom(modem_t *self,
                               int socket,
                               void *buffer,
                               size_t length,
@@ -756,6 +740,8 @@ int16_t modem_socket_recvfrom(modem_t *self,
   //timer.start();
   LOCK();
   vTaskSetTimeOutState(&xTimeOut);
+  
+  address->sin_family = AF_INET;
   
   
   while (success && (length > 0)) 
@@ -811,7 +797,6 @@ int16_t modem_socket_recvfrom(modem_t *self,
           read_sz = atparser_read(self->at, buf, usorf_sz);
           if (read_sz > 0) 
           {
-            //address->sin_addr = pvPortMalloc(sizeof(ipAddress));
             strcpy(address->sin_addr, ipAddress);
             address->sin_port = port;
             ssLoggingPrintRawStr(ESsLoggingLevel_Debug, 0, buf, read_sz, "[SOCK rd] %s:%d (%d)-> ", ipAddress, port, usorf_sz);
@@ -857,7 +842,6 @@ int16_t modem_socket_recvfrom(modem_t *self,
   
   //timer.stop();
   UNLOCK();
-  ulTaskNotifyTake(pdTRUE, xTicksToWait); // Merkat experimenting with this
   
   // ssLoggingPrint(ESsLoggingLevel_Debug, 0, "socket_recvfrom: %d \"%*.*s\"", count, count, count, buf - count);
   
@@ -993,6 +977,10 @@ bool set_device_identity(modem_t *self)
     else if (strstr(buf, "SARA-N2"))
     {
       self->dev_info.dev = DEV_SARA_N2;
+    }
+    else if (strstr(buf, "SARA-R4"))
+    {
+      self->dev_info.dev = DEV_SARA_R4;
     }
   }
   

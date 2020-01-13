@@ -87,6 +87,7 @@ typedef enum {
   DEV_TYPE_NONE = 0,
   DEV_SARA_N2,
   DEV_SARA_U2,
+  DEV_SARA_R4,
 } DeviceType;
 
 /** Network registration status.
@@ -129,13 +130,13 @@ typedef struct SockCtrl
 
 typedef struct SocketAddress
 {
-    uint8_t   sin_family;     
+    uint16_t  sin_family;     
     char      sin_addr[14];       
 } SocketAddress;
 
 typedef struct SocketAddress_in
 {
-    uint8_t   sin_family;     
+    uint16_t  sin_family;     
     uint16_t  sin_port;
     char      sin_addr[INET_ADDRSTRLEN];       
 } SocketAddress_in;
@@ -186,21 +187,21 @@ typedef struct modem_t
   int16_t modem_socket_connect(modem_t *self, int socket,
                            const struct SocketAddress_in *address);
 
-  int16_t modem_socket_send(modem_t *self,
+  int32_t modem_socket_send(modem_t *self,
                             int socket,
                             const void *message,
                             size_t length);
 
-  int16_t modem_socket_sendto(modem_t *self,
+  int32_t modem_socket_sendto(modem_t *self,
                               int socket,
                               const void *message,
                               size_t length,
                               const struct SocketAddress_in *dest_addr);
-  int16_t modem_socket_recv(modem_t *self,
+  int32_t modem_socket_recv(modem_t *self,
                                 int socket,
                                 void *buffer,
                                 size_t length);
-  int16_t modem_socket_recvfrom(modem_t *self,
+  int32_t modem_socket_recvfrom(modem_t *self,
                                 int socket,
                                 void *buffer,
                                 size_t length,

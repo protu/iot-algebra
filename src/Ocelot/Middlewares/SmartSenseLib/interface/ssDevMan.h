@@ -21,16 +21,16 @@ extern "C" {
 typedef struct netif_t netif_t;
 struct netif_t
 {
-    int16_t (*socket_open)(int16_t domain, int16_t type, int16_t protocol);
+    int16_t (*socket_open)(int domain, int type, int protocol);
     int16_t (*socket_close)(netif_t *dev, int16_t s);
-    int16_t (*socket_connect)(netif_t *dev, int16_t socket, const struct sockaddr *addr, int16_t addrlen);
-    int16_t (*socket_send)(netif_t *dev, int16_t socket, const char *buf, int16_t len, int16_t flags);
-    int16_t (*socket_sendto)(netif_t *dev, int16_t s, char *buf, int16_t len, int16_t flags,
-                                         const struct sockaddr_in *to, uint16_t to_len);
+    int32_t (*socket_connect)(netif_t *dev, int socket, const struct sockaddr *addr, socklen_t addrlen);
+    int32_t (*socket_send)(netif_t *dev, int socket, const char *buf, size_t len, int8_t flags);
+    int32_t (*socket_sendto)(netif_t *dev, int s, char *buf, size_t len, int8_t flags,
+                                         const struct sockaddr_in *to, socklen_t to_len);
 
-    int16_t (*socket_recv)(netif_t *dev, int16_t socket, char *buf, int16_t len, int16_t flags);
-    int16_t (*socket_recvfrom)(netif_t *dev, int16_t s, char *buf, int16_t len, int16_t flags,
-                                         struct sockaddr_in *from, uint16_t *fromlen);
+    int32_t (*socket_recv)(netif_t *dev, int socket, char *buf, size_t len, int8_t flags);
+    int32_t (*socket_recvfrom)(netif_t *dev, int s, char *buf, size_t len, int8_t flags,
+                                         struct sockaddr_in *from, socklen_t *fromlen);
     int32_t (*gethostbyname)(const char *hostname, uint32_t *out_ip_addr);
 };
 /*------------------------- PUBLIC VARIABLES ---------------------------------*/

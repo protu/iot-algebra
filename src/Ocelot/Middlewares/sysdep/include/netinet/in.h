@@ -14,7 +14,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+  
+#include <inttypes.h>
+#include <sys/socket.h> 
+  
 /*------------------------- MACRO DEFINITIONS --------------------------------*/
 /*
  * Protocols (RFC 1700)
@@ -26,7 +29,7 @@ extern "C" {
 #define IPPROTO_IPV6		        41
 #define IPV6_V6ONLY             23  /**< \brief IPv6 only -- no IPv4 (get/set) */
 
-#define INET_ADDRSTRLEN         16
+#define INET_ADDRSTRLEN         10
 #define INET6_ADDRSTRLEN        46
 
 #define INET6_ADDRESS_SIZE        16

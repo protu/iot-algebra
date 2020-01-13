@@ -1,4 +1,4 @@
-/**
+	/**
  * @file     
  * @brief    
  * @warning
@@ -8,6 +8,7 @@
  *
  **/
 
+ 
 #ifndef _SYS_SOCKET_H
 #define _SYS_SOCKET_H
 
@@ -47,7 +48,7 @@ extern "C" {
 #define	SO_KEEPALIVE	  0x0008		/* keep connections alive */
 #define	SO_DONTROUTE	  0x0010		/* just use interface addresses */
 #define	SO_BROADCAST	  0x0020		/* permit sending of broadcast msgs */
-#define	SO_USELOOPBACK	0x0040		/* bypass hardware when possible */
+#define	SO_USELOOPBACK	  0x0040		/* bypass hardware when possible */
 #define	SO_LINGER	      0x0080	  /* linger on close if data present */
 #define	SO_OOBINLINE	  0x0100		/* leave received OOB data in line */
 
@@ -76,19 +77,23 @@ extern "C" {
 #define	MSG_CTRUNC	  0x20		/* control data lost before delivery */
 #define	MSG_WAITALL	  0x40		/* wait for full request or error */
   
+
+#ifndef IN6_IS_ADDR_V4MAPPED
+# define IN6_IS_ADDR_V4MAPPED(a)	0
+#endif
+
 /*------------------------- TYPE DEFINITIONS ---------------------------------*/
 
-typedef uint32_t sa_family_t;
+
+typedef uint16_t sa_family_t;
 typedef uint32_t socklen_t;
   
 struct sockaddr 
 {
-	uint8_t	sa_len;			  /* total length */
-	uint8_t	sa_family;		/* address family */
-	char	sa_data[16];		/* address value */
+	uint16_t	sa_family;		/* address family */
+	char	    sa_data[14];		/* address value */
 };
   
-
 /*
  * Structure used for manipulating linger option.
  */
@@ -118,7 +123,7 @@ struct addrinfo
   int             ai_family;
   int             ai_socktype;
   int             ai_protocol;
-  size_t          ai_addrlen;
+  int             ai_addrlen;
   struct sockaddr *ai_addr;
   char            *ai_canonname;
   struct addrinfo  *ai_next;
@@ -127,10 +132,10 @@ struct addrinfo
 #define AI_PASSIVE 0x01
 
 struct sockaddr_storage {
-  sa_family_t   ss_family;
+  sa_family_t   sa_family;
   uint16_t    sin_port; 
   sa_family_t	sa_len;			
-  char	sa_data[16];		
+  char	sa_data[14];		
 };
 
 /*------------------------- PUBLIC VARIABLES ---------------------------------*/

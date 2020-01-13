@@ -20,6 +20,7 @@ extern "C" {
 #include "cmsis_os.h"
   
 #include "hal_modem.h"
+#include "ublox/hal_ublox_sara_u270.h"
 
   
 #if !defined(MODEM_USED) 

@@ -101,11 +101,12 @@ bool ssGNSSGetCoords(struct ssGNSScoords *coords)
     do
     {
       ssUartGets(GNSSConfigData->uartId, GNSSConfigData->buffer, USART_BUFFER_SIZE, GNSS_UART_TIMEOUT);
+      //ssLoggingPrint(ESsLoggingLevel_Info, 0, "GPS: %s", GNSSConfigData->buffer);
     } while(sscanf((char const *)GNSSConfigData->buffer, "$GNGLL,%f,%*c,%f,", &(coords->lat), &(coords->lon)) != 2);
     
     coords->lat = TO_DECIMAL(coords->lat);
     coords->lon = TO_DECIMAL(coords->lon);
-    ssLoggingPrint(ESsLoggingLevel_Info, 0, "%f : %f", coords->lat, coords->lon);
+    //ssLoggingPrint(ESsLoggingLevel_Info, 0, "%f : %f", coords->lat, coords->lon);
 
     return true;
 }
