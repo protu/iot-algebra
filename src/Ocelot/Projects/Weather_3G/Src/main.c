@@ -202,8 +202,8 @@ void SendTask(void const * argument) {
 	ssLoggingPrint(ESsLoggingLevel_Info, 0, "Starting default task");
 
 	struct addrinfo hints;
-	const char serverURL[] = "udp.smart-sense.hr";
-	const char serverPort[] = "10004";
+	const char serverURL[] = "iot.fridgenet.net";
+	const char serverPort[] = "12000";
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;

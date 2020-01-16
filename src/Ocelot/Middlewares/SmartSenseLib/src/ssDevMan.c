@@ -40,7 +40,7 @@
 
 /*------------------------- PRIVATE FUNCTION PROTOTYPES ----------------------*/
 
-#define APN       "internet.ht.hr"
+#define APN       "internet"
 #define PIN         NULL
 
 netif_t *get_device(void)
