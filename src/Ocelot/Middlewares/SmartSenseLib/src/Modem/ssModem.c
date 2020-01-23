@@ -270,7 +270,7 @@ bool modem_nwk_register(modem_t *self)
       }
     }
     // Wait for registration to succeed
-    atparser_set_timeout(self->at, 1000);
+    atparser_set_timeout(self->at, 1500);
     for (int waitSeconds = 0; !registered && (waitSeconds < 180); waitSeconds++)
     {
       registered = is_registered_psd(self) || is_registered_csd(self) || is_registered_eps(self);
@@ -282,7 +282,7 @@ bool modem_nwk_register(modem_t *self)
     {
       // This should return quickly but sometimes the status field is not returned
       // so make the timeout short
-      atparser_set_timeout(self->at, 1000);
+      atparser_set_timeout(self->at, 1500);
       if (atparser_send(self->at, "AT+COPS?") && atparser_recv(self->at, "+COPS: %*d,%*d,\"%*[^\"]\",%d\n", &status))
       {
         set_rat(self, status);

@@ -117,8 +117,8 @@ char rec_buf[REC_BUFF_LEN];
 int8_t udp_sock = -1;
 struct addrinfo *res_udp;
 struct ssCoord_time gps_value;
-int16_t temperature = 0;
-int16_t humidity = 0;
+int16_t temperature;
+int16_t humidity;
 
 
 /* Private function prototypes -----------------------------------------------*/
@@ -229,7 +229,7 @@ void SendTask(void const * argument) {
 	/* Infinite loop, read sensors and send every 5 seconds */
 	while(1) {
 
-		sprintf(udp_buf, "temp=%d.%d, hum=%d.%d, lat=%2.6f, lon=%2.6f", temperature/100, temperature % 100, humidity/100, humidity % 100,gps_value.coords.lat, gps_value.coords.lon );
+		sprintf(udp_buf, "dev=1;temp=%d.%d;hum=%d.%d;lat=%2.6f;lon=%2.6f", temperature/100, temperature % 100, humidity/100, humidity % 100,gps_value.coords.lat, gps_value.coords.lon );
 
 		//send to server
 		send_res = sendto(udp_sock, udp_buf, strlen(udp_buf), 0, (const struct sockaddr *)(res_udp->ai_addr), sizeof(res_udp->ai_addr));
@@ -330,8 +330,8 @@ void LedTask(void const * argument) {
 // Task for reading temperature and humidity
 void TempHumTask(void const * argument) {
 
-	gps_value.coords.lat = 0;
-	gps_value.coords.lon = 0;
+	temperature = 0;
+	humidity = 0;
 
 	// initialize GPS
 	ssLoggingPrint(ESsLoggingLevel_Info, 0, "Initializing Temperature and Humidity sensor...");
