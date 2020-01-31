@@ -66,7 +66,7 @@
 
 
 #define GNSS_UART                       USART1
-#define REC_BUFF_LEN 128
+#define REC_BUFF_LEN 512
 
 /* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef huart1;
@@ -88,7 +88,6 @@ osThreadId watchdogTaskHandle;
 static I2C_HandleTypeDef hi2c2;
 
 static int32_t si7021_handle;
-char str_buff[50];
 
 const char cliAppName[] = "ModemPassthrough";
 
@@ -112,13 +111,15 @@ GpsStatus_t gps_status = GPS_STARTUP;
 
 
 //socket buffers
-char udp_buf[128];
+char udp_buf[512];
 char rec_buf[REC_BUFF_LEN];
 int8_t udp_sock = -1;
 struct addrinfo *res_udp;
 struct ssCoord_time gps_value;
 int16_t temperature;
 int16_t humidity;
+char dateTime[32];
+struct ssGNSSpeed gps_speed;
 
 
 /* Private function prototypes -----------------------------------------------*/
@@ -194,16 +195,13 @@ void SendTask(void const * argument) {
 
 	ssUartConfigType config;
 
-
 	int8_t send_res = 0;
-
-
   
 	ssLoggingPrint(ESsLoggingLevel_Info, 0, "Starting default task");
 
 	struct addrinfo hints;
 	const char serverURL[] = "iot.fridgenet.net";
-	const char serverPort[] = "12000";
+	const char serverPort[] = "2048";
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
@@ -221,7 +219,7 @@ void SendTask(void const * argument) {
 		network_status = NWK_CONNECTED;
 	}
 
-	osThreadDef(rcvTask, ReceiveTask, osPriorityNormal, 0, 512);
+	osThreadDef(rcvTask, ReceiveTask, osPriorityHigh, 0, 512);
 	rcvTaskHandle = osThreadCreate(osThread(rcvTask), NULL);
 
 
@@ -229,7 +227,8 @@ void SendTask(void const * argument) {
 	/* Infinite loop, read sensors and send every 5 seconds */
 	while(1) {
 
-		sprintf(udp_buf, "dev=1;temp=%d.%d;hum=%d.%d;lat=%2.6f;lon=%2.6f", temperature/100, temperature % 100, humidity/100, humidity % 100,gps_value.coords.lat, gps_value.coords.lon );
+//		sprintf(udp_buf, "dev=1;temp=%d.%d;hum=%d.%d;lat=%2.6f;lon=%2.6f", temperature/100, temperature % 100, humidity/100, humidity % 100,gps_value.coords.lat, gps_value.coords.lon );
+		sprintf(udp_buf, "1;%d.%d;%2.6f;%3.2f;%2.6f;%s;%d.%d", temperature/100, temperature % 100,gps_value.coords.lat,gps_speed.speed, gps_value.coords.lon, dateTime, humidity/100, humidity % 100 );
 
 		//send to server
 		send_res = sendto(udp_sock, udp_buf, strlen(udp_buf), 0, (const struct sockaddr *)(res_udp->ai_addr), sizeof(res_udp->ai_addr));
@@ -253,7 +252,7 @@ void ReceiveTask(void const * argument) {
 
 	  rec_res = recvfrom(udp_sock, rec_buf, REC_BUFF_LEN, 0,  (const struct sockaddr *)(res_udp->ai_addr), sizeof(res_udp->ai_addr));
 
-	  if (rec_res >= 0) {
+	  if (rec_res > 0) {
 		  ssLoggingPrint(ESsLoggingLevel_Debug, 0, "UDP Received: %s", rec_buf);
 	  }
 	  else if (rec_res == -1) {
@@ -269,6 +268,7 @@ void GPSTask(void const * argument) {
 
 	gps_value.coords.lat = 0;
 	gps_value.coords.lon = 0;
+	gps_speed.speed = 0;
 
 	// initialize GPS
 	ssLoggingPrint(ESsLoggingLevel_Info, 0, "Initializing GPS receiver...");
@@ -276,9 +276,13 @@ void GPSTask(void const * argument) {
 
 	while(1) {
 
+		if (ssGNSSGetTime(&dateTime, 8)) {
+			ssLoggingPrint(ESsLoggingLevel_Info, 0, "Time: %s\n\r", dateTime);
+		}
+		ssGNSSGetSpeed(&(gps_speed.speed));
+		ssLoggingPrint(ESsLoggingLevel_Info, 0, "Speed: %f\n\r", gps_speed.speed);
 		ssGNSSGetCoords(&(gps_value.coords));
-
-		ssLoggingPrint(ESsLoggingLevel_Info, 0, "Position: lat=%2.6f, lon=%2.6f", gps_value.coords.lat, gps_value.coords.lon);
+		ssLoggingPrint(ESsLoggingLevel_Info, 0, "Position: lat=%2.6f, lon=%2.6f \n\r", gps_value.coords.lat, gps_value.coords.lon) ;
 
 		// pulse blue LED  every time we receive fix
 		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_11, GPIO_PIN_SET); //blue LED ON
@@ -363,7 +367,7 @@ void TempHumTask(void const * argument) {
 
 	while(1) {
 
-
+		osDelay(5000);
 		// read temperature
 		if(ssSi70xx_ReadTemperature(si7021_handle, 100, &temperature) == SS_SI70XX_OK) {
 

@@ -32,6 +32,11 @@ struct ssGNSScoords
     float lon;
 };
 
+struct ssGNSSpeed
+{
+	float speed;
+};
+
 struct ssCoord_time
 {
     struct ssGNSScoords coords;

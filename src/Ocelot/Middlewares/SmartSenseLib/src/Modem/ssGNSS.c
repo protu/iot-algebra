@@ -101,7 +101,7 @@ bool ssGNSSGetCoords(struct ssGNSScoords *coords)
     do
     {
       ssUartGets(GNSSConfigData->uartId, GNSSConfigData->buffer, USART_BUFFER_SIZE, GNSS_UART_TIMEOUT);
-      //ssLoggingPrint(ESsLoggingLevel_Info, 0, "GPS: %s", GNSSConfigData->buffer);
+//      ssLoggingPrint(ESsLoggingLevel_Info, 0, "GPS: %s", GNSSConfigData->buffer);
     } while(sscanf((char const *)GNSSConfigData->buffer, "$GNGLL,%f,%*c,%f,", &(coords->lat), &(coords->lon)) != 2);
     
     coords->lat = TO_DECIMAL(coords->lat);
@@ -111,6 +111,23 @@ bool ssGNSSGetCoords(struct ssGNSScoords *coords)
     return true;
 }
 
+bool ssGNSSGetSpeed(struct ssGNSSpeed * speed)
+{
+
+	do
+	{
+    ssUartGets(GNSSConfigData->uartId, GNSSConfigData->buffer, USART_BUFFER_SIZE, GNSS_UART_TIMEOUT);
+//      ssLoggingPrint(ESsLoggingLevel_Info, 0, "GPS: %s", GNSSConfigData->buffer);
+  } while(sscanf((char const *)GNSSConfigData->buffer, "$GNVTG%*[^N]N,%f", &(speed->speed)) != 1);
+
+
+//    $GNVTG,,T,,M,0.085,N,0.158,K,A*3C
+
+
+    //ssLoggingPrint(ESsLoggingLevel_Info, 0, "%f : %f", coords->lat, coords->lon);
+
+    return true;
+}
 /* Function retrieves UTC time and date from GNSS */
 bool ssGNSSGetTime(char *datetime, size_t size)
 {
