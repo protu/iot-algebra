@@ -1,0 +1,7 @@
+Time: 0:8:53, From : 127.0.0.1:57476, Message: 1;35;91;new Date();17.56432;27.43215;60 
+Time: 0:8:53, OK sent to client 
+Time: 0:18:14, From : 127.0.0.1:50425, Message: 1;35;91;new Date();17.56432;27.43215;60 
+Time: 0:18:14, OK sent to client 
+Time: 0:20:4, From : 127.0.0.1:59138, Message: 1;35;91;27/01/2020 00:19:12;17.56432;27.43215;60 
+Time: 0:20:4, OK sent to client 
+Time: 0:20:4, Rows added to postgres 
